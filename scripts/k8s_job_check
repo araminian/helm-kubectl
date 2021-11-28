@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+
+JOB_NAME=$1
+NAMESPACE=$2
+
+script_help() {
+
+echo "
+
+A script for checking Job status
+
+k8s_job_check <job> [<namespace>]
+
+Return code:
+
+return 0 : if job exists and is completed
+
+return 1 : if job deosn't exist or is failed
+
+Example:
+
+# Check status job1 in default namespace
+k8s_job_check job1 
+
+# Check status job2 in db namespace
+k8s_job_check job2 db
+"
+
+exit 1
+}
+
+if [ -z "$JOB_NAME" ] || [ "$1" = "--help" ];
+then
+    script_help
+fi
+
+if [[ "$#" -ne 1 && "$#" -ne 2 ]]; then
+    echo "Illegal number of parameters"
+    script_help 
+fi
+
+if [ -z "$NAMESPACE" ]
+then
+    NAMESPACE='default'
+fi
+
+# Sleep for 10s
+sleep 5
+
+if kubectl get jobs $JOB_NAME -n $NAMESPACE 2>/dev/null; then
+    echo "The job ${JOB_NAME} exists"
+else
+    echo "The job ${JOB_NAME} doesn't exist"
+    exit 1
+fi
+
+# Switch Namespace
+kubectl config set-context $(kubectl config current-context) --namespace=$NAMESPACE
+
+# Check job (Succeed or Failed)
+k8s_wait_for job-we $JOB_NAME
+
+# Check Job Complete or Failed
+jobResult=$(kubectl get jobs test -o jsonpath='{.status.conditions[0].type}')
+
+# Back namespace to default
+kubectl config set-context $(kubectl config current-context) --namespace='default'
+
+if [ "$jobResult" = "Complete" ]; then
+  echo "Job ${JOB_NAME} is completed."
+  exit 0
+fi
+
+if [ "$jobResult" = "Failed" ]; then
+  echo "Job ${JOB_NAME} is failed."
+  exit 1
+fi
+
